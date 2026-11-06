@@ -1,0 +1,86 @@
+name: Reusable / PR checks
+
+# Keeps pull requests readable: the title must follow Conventional Commits, the
+# description must not be empty, and large PRs get a warning. Also labels the PR
+# with its commit type. Must be called from a pull_request event.
+#
+# Usage:
+#   on:
+#     pull_request:
+#       types: [opened, edited, synchronize, reopened]
+#   jobs:
+#     pr-checks:
+#       uses: Megjafari/platform-pipelines/.github/workflows/reusable-pr-checks.yml@v1
+#       permissions:
+#         contents: read
+#         issues: write
+#         pull-requests: write
+
+on:
+  workflow_call:
+    inputs:
+      types:
+        description: Allowed commit types, separated by |
+        type: string
+        default: feat|fix|docs|chore|ci|refactor|test|build|perf|revert
+      max-changed-lines:
+        description: Warn when additions plus deletions exceed this
+        type: number
+        default: 500
+      label:
+        description: Label the PR with its commit type
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: title, description, size
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    env:
+      TITLE: ${{ github.event.pull_request.title }}
+      BODY: ${{ github.event.pull_request.body }}
+      TYPES: ${{ inputs.types }}
+    steps:
+      - name: Check title
+        run: |
+          if [[ ! "$TITLE" =~ ^($TYPES)(\([a-z0-9-]+\))?!?:\ .+ ]]; then
+            echo "::error::PR title must follow Conventional Commits, like 'feat(scope): add thing'. Allowed types: $TYPES"
+            exit 1
+          fi
+
+      - name: Check description
+        run: |
+          if [ -z "${BODY//[[:space:]]/}" ]; then
+            echo "::error::PR description must not be empty"
+            exit 1
+          fi
+
+      - name: Check size
+        env:
+          ADDITIONS: ${{ github.event.pull_request.additions }}
+          DELETIONS: ${{ github.event.pull_request.deletions }}
+          MAX: ${{ inputs.max-changed-lines }}
+        run: |
+          CHANGED=$((ADDITIONS + DELETIONS))
+          if [ "$CHANGED" -gt "$MAX" ]; then
+            echo "::warning::This PR changes $CHANGED lines (limit $MAX). Consider splitting it."
+          fi
+
+      # The token cannot write to labels on PRs from forks.
+      - name: Label with commit type
+        if: inputs.label && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          label="type: ${TITLE%%[(:!]*}"
+          gh label create "$label" --force --color ededed
+          gh pr edit "$PR" --add-label "$label"
