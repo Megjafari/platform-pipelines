@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>node-web</title>
+  </head>
+  <body>
+    <h1 id="greeting"></h1>
+    <script type="module">
+      import { greeting } from "./greeting.js";
+      document.getElementById("greeting").textContent = greeting();
+    </script>
+  </body>
+</html>

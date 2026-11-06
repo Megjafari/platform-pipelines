@@ -1,0 +1,123 @@
+name: Reusable / Node CI
+
+# Installs dependencies from the lockfile and runs the project's lint, typecheck,
+# test and build scripts. A script missing from package.json is skipped.
+#
+# Usage:
+#   jobs:
+#     node:
+#       uses: Megjafari/platform-pipelines/.github/workflows/reusable-node-ci.yml@v1
+#       with:
+#         package-manager: pnpm
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version
+        type: string
+        default: "24"
+      package-manager:
+        description: npm, pnpm or yarn (pnpm and yarn run through corepack)
+        type: string
+        default: npm
+      working-directory:
+        description: Directory containing package.json
+        type: string
+        default: "."
+      run-lint:
+        type: boolean
+        default: true
+      run-typecheck:
+        type: boolean
+        default: true
+      run-test:
+        type: boolean
+        default: true
+      run-build:
+        type: boolean
+        default: true
+      build-output:
+        description: Build output to upload as an artifact, relative to working-directory (skipped when empty)
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: lint, test, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    env:
+      PACKAGE_MANAGER: ${{ inputs.package-manager }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          package-manager-cache: false
+
+      - name: Enable corepack
+        if: inputs.package-manager != 'npm'
+        run: |
+          npm install --global corepack
+          corepack enable
+
+      - name: Cache package store
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.npm
+            ~/.local/share/pnpm/store
+            ~/.cache/yarn
+            ~/.yarn/berry/cache
+          key: node-${{ runner.os }}-${{ inputs.package-manager }}-${{ hashFiles('**/*-lock.*', '**/yarn.lock') }}
+          restore-keys: node-${{ runner.os }}-${{ inputs.package-manager }}-
+
+      - name: Install dependencies
+        run: |
+          case "$PACKAGE_MANAGER" in
+            npm) npm ci ;;
+            pnpm) pnpm install --frozen-lockfile ;;
+            yarn) yarn install --immutable ;;
+            *) echo "::error::Unsupported package manager: $PACKAGE_MANAGER"; exit 1 ;;
+          esac
+
+      - name: Prepare script runner
+        run: |
+          cat > "$RUNNER_TEMP/run-script.sh" <<'EOF'
+          if node -e 'process.exit(require("./package.json").scripts?.[process.argv[1]] ? 0 : 1)' "$1"; then
+            "$PACKAGE_MANAGER" run "$1"
+          else
+            echo "Script '$1' not found in package.json, skipping"
+          fi
+          EOF
+
+      - name: Lint
+        if: inputs.run-lint
+        run: bash "$RUNNER_TEMP/run-script.sh" lint
+
+      - name: Typecheck
+        if: inputs.run-typecheck
+        run: bash "$RUNNER_TEMP/run-script.sh" typecheck
+
+      - name: Test
+        if: inputs.run-test
+        run: bash "$RUNNER_TEMP/run-script.sh" test
+
+      - name: Build
+        if: inputs.run-build
+        run: bash "$RUNNER_TEMP/run-script.sh" build
+
+      - name: Upload build output
+        if: inputs.build-output != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: node-build
+          path: ${{ inputs.working-directory }}/${{ inputs.build-output }}
+          if-no-files-found: error
