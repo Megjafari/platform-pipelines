@@ -3,3 +3,9 @@ site_description: Reusable CI/CD workflows
 repo_url: https://github.com/Megjafari/platform-pipelines
 theme:
   name: material
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format

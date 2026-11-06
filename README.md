@@ -1,36 +1,41 @@
 # platform-pipelines
 
+[![CI](https://github.com/Megjafari/platform-pipelines/actions/workflows/ci.yml/badge.svg)](https://github.com/Megjafari/platform-pipelines/actions/workflows/ci.yml)
+[![Workflow tests](https://github.com/Megjafari/platform-pipelines/actions/workflows/workflow-tests.yml/badge.svg)](https://github.com/Megjafari/platform-pipelines/actions/workflows/workflow-tests.yml)
+[![Release](https://img.shields.io/github/v/release/Megjafari/platform-pipelines)](https://github.com/Megjafari/platform-pipelines/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 A library of reusable CI/CD workflows. Instead of copying pipelines between
 projects, a repository calls the workflow it needs and pins a version:
 
 ```yaml
 jobs:
   ci:
-    uses: OWNER/platform-pipelines/.github/workflows/reusable-dotnet-ci.yml@v1
+    uses: Megjafari/platform-pipelines/.github/workflows/reusable-dotnet-ci.yml@v1
     with:
       dotnet-version: "10.0.x"
 ```
 
 Fix something once here, and every consumer gets it by bumping the version.
 
-> **Status:** under construction. Scaffold, `reusable-lint`, `reusable-container` and `reusable-dotnet-ci` are done.
-> The catalog below shows what is planned and what already exists.
+See [how the pieces fit together](docs/architecture.md) and the
+[documentation site](https://megjafari.github.io/platform-pipelines/).
 
 ## Catalog
 
-| Workflow | Purpose | Status |
-| --- | --- | --- |
-| [`reusable-lint`](#reusable-lint) | actionlint, yamllint, gitleaks | available |
-| [`reusable-dotnet-ci`](#reusable-dotnet-ci) | .NET 10 build, test, coverage, format check | available |
-| `reusable-node-ci` | npm / pnpm / yarn: lint, typecheck, test, build | planned |
-| [`reusable-container`](#reusable-container) | multi-arch build, SBOM, Trivy, cosign, provenance, GHCR | available |
-| `reusable-iac-validate` | Terraform, kubeconform, conftest policies | planned |
-| `reusable-release` | conventional commits and release-please | planned |
-| `reusable-docs-site` | Markdown to GitHub Pages | planned |
-| `reusable-pr-checks` | PR title, labels, size, description | planned |
-| `reusable-codeql` | SAST for C# and JavaScript | planned |
-| `reusable-dependency-review` | block vulnerable or badly licensed dependencies | planned |
-| `reusable-lighthouse` | performance / accessibility budgets | planned |
+| Workflow | Purpose |
+| --- | --- |
+| [`reusable-lint`](#reusable-lint) | actionlint, yamllint, gitleaks |
+| [`reusable-dotnet-ci`](#reusable-dotnet-ci) | .NET build, test, coverage, format check |
+| [`reusable-node-ci`](#reusable-node-ci) | npm / pnpm / yarn: lint, typecheck, test, build |
+| [`reusable-container`](#reusable-container) | Multi-arch build, Trivy gate, SBOM, cosign, provenance, GHCR |
+| [`reusable-iac-validate`](#reusable-iac-validate) | Terraform, kubeconform, conftest policies |
+| [`reusable-release`](#reusable-release) | Conventional Commits to release PR, tag and changelog |
+| [`reusable-docs-site`](#reusable-docs-site) | MkDocs site on GitHub Pages |
+| [`reusable-pr-checks`](#reusable-pr-checks) | PR title, description, size, labels |
+| [`reusable-codeql`](#reusable-codeql) | Static security analysis |
+| [`reusable-dependency-review`](#reusable-dependency-review) | Block vulnerable or badly licensed dependencies |
+| [`reusable-lighthouse`](#reusable-lighthouse) | Performance and accessibility budgets |
 
 ### reusable-lint
 
@@ -40,7 +45,7 @@ history for secrets (gitleaks, checksum-verified install).
 ```yaml
 jobs:
   lint:
-    uses: OWNER/platform-pipelines/.github/workflows/reusable-lint.yml@v1
+    uses: Megjafari/platform-pipelines/.github/workflows/reusable-lint.yml@v1
     permissions:
       contents: read
 ```
@@ -64,7 +69,7 @@ package for coverage. Can also publish a project as an artifact.
 ```yaml
 jobs:
   dotnet:
-    uses: OWNER/platform-pipelines/.github/workflows/reusable-dotnet-ci.yml@v1
+    uses: Megjafari/platform-pipelines/.github/workflows/reusable-dotnet-ci.yml@v1
     with:
       dotnet-version: "10.0.x"
       working-directory: src
@@ -88,7 +93,7 @@ digest, and then verifies the result. Pull requests build and scan but never pus
 ```yaml
 jobs:
   container:
-    uses: OWNER/platform-pipelines/.github/workflows/reusable-container.yml@v1
+    uses: Megjafari/platform-pipelines/.github/workflows/reusable-container.yml@v1
     permissions:
       contents: read
       packages: write
@@ -119,11 +124,210 @@ cosign verify ghcr.io/OWNER/IMAGE@sha256:DIGEST \
   --certificate-github-workflow-repository OWNER/REPO
 ```
 
+### reusable-node-ci
+
+Installs from the lockfile and runs the project's `lint`, `typecheck`, `test` and
+`build` scripts. A script missing from `package.json` is skipped. pnpm and yarn
+run through corepack, so set `packageManager` in `package.json`.
+
+```yaml
+jobs:
+  node:
+    uses: Megjafari/platform-pipelines/.github/workflows/reusable-node-ci.yml@v1
+    with:
+      package-manager: pnpm
+      build-output: dist
+```
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `node-version` | `24` | Node.js version |
+| `package-manager` | `npm` | `npm`, `pnpm` or `yarn` |
+| `working-directory` | `.` | Directory with `package.json` |
+| `run-lint`, `run-typecheck`, `run-test`, `run-build` | `true` | Turn a step off |
+| `build-output` | empty | Output to upload as an artifact |
+
+### reusable-iac-validate
+
+Each part runs only when its directory is set, and none of them need credentials
+or remote state. `conftest verify` runs the policies' own unit tests, and
+`conftest test` applies them to the manifests. The policies live in the calling
+repository; [`policies/`](policies) is an example.
+
+```yaml
+jobs:
+  iac:
+    uses: Megjafari/platform-pipelines/.github/workflows/reusable-iac-validate.yml@v1
+    with:
+      terraform-directory: terraform
+      kubernetes-directory: k8s
+      policy-directory: policies
+```
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `terraform-directory` | empty | fmt, validate and tflint |
+| `kubernetes-directory` | empty | kubeconform |
+| `policy-directory` | empty | conftest |
+| `terraform-version` | `latest` | Terraform version |
+| `tflint-version`, `kubeconform-version`, `conftest-version` | see workflow | Pinned tool versions |
+
+### reusable-release
+
+release-please turns Conventional Commits into a release PR with a changelog, and
+merging that PR creates the tag and GitHub release. Needs
+`release-please-config.json`, `.release-please-manifest.json` and the repository
+setting *Allow GitHub Actions to create and approve pull requests*.
+
+```yaml
+jobs:
+  release:
+    uses: Megjafari/platform-pipelines/.github/workflows/reusable-release.yml@v1
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      update-major-tag: true
+```
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `update-major-tag` | `false` | Move the floating major tag (`v1`) to each release |
+
+Outputs: `release-created` and `tag-name`.
+
+### reusable-docs-site
+
+Builds a MkDocs Material site in strict mode, so broken links fail the build, and
+can deploy it to GitHub Pages. Set Pages to *GitHub Actions* in the repository
+settings first.
+
+```yaml
+jobs:
+  docs:
+    uses: Megjafari/platform-pipelines/.github/workflows/reusable-docs-site.yml@v1
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    with:
+      deploy: ${{ github.ref == 'refs/heads/main' }}
+```
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `working-directory` | `.` | Directory with `mkdocs.yml` |
+| `deploy` | `false` | Deploy to GitHub Pages |
+| `python-version`, `mkdocs-material-version` | see workflow | Pinned tool versions |
+
+### reusable-pr-checks
+
+The PR title must follow Conventional Commits and the description must not be
+empty. Large PRs get a warning, and the PR is labeled with its commit type. Call it
+from a `pull_request` event with `types: [opened, edited, synchronize, reopened]`,
+so that editing the title runs it again.
+
+```yaml
+jobs:
+  pr-checks:
+    uses: Megjafari/platform-pipelines/.github/workflows/reusable-pr-checks.yml@v1
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+```
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `types` | `feat\|fix\|docs\|chore\|ci\|refactor\|test\|build\|perf\|revert` | Allowed commit types |
+| `max-changed-lines` | `500` | Warn above this size |
+| `label` | `true` | Label the PR with its commit type |
+
+### reusable-codeql
+
+Static security analysis without a build step. Results appear under the Security
+tab. Every language in the list needs source code in the repository.
+
+```yaml
+jobs:
+  codeql:
+    uses: Megjafari/platform-pipelines/.github/workflows/reusable-codeql.yml@v1
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+      security-events: write
+    with:
+      languages: '["csharp", "javascript-typescript"]'
+```
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `languages` | `["csharp", "javascript-typescript"]` | JSON list of languages |
+| `queries` | `security-extended` | Query suite |
+
+### reusable-dependency-review
+
+Blocks PRs that add dependencies with known vulnerabilities or denied licenses.
+Call it from a `pull_request` event. The repository needs the dependency graph
+turned on.
+
+```yaml
+jobs:
+  dependency-review:
+    uses: Megjafari/platform-pipelines/.github/workflows/reusable-dependency-review.yml@v1
+    permissions:
+      contents: read
+      pull-requests: write
+```
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `fail-on-severity` | `high` | Lowest severity that fails the check |
+| `deny-licenses` | `AGPL-3.0-only, AGPL-3.0-or-later` | Licenses to block |
+| `comment-summary` | `on-failure` | When to comment on the PR |
+
+### reusable-lighthouse
+
+Fails when a Lighthouse category drops below its budget. Works on a built site or
+a deployed URL, and uses the median of several runs because scores vary a little.
+Scores go to the job summary and full reports are uploaded as artifacts.
+
+```yaml
+jobs:
+  lighthouse:
+    uses: Megjafari/platform-pipelines/.github/workflows/reusable-lighthouse.yml@v1
+    with:
+      static-dir: dist
+      min-performance: 0.8
+```
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `static-dir` | empty | Built site, relative to the repository root |
+| `url` | empty | Deployed site, used when `static-dir` is empty |
+| `runs` | `3` | Runs per page |
+| `min-performance`, `min-accessibility`, `min-best-practices`, `min-seo` | `0.9` | Budgets from 0 to 1 |
+
+## Versions
+
+Pin `@v1` to get fixes automatically, or an exact tag such as `@v1.0.0` for full
+control. Breaking changes get a new major version. Releases are listed on the
+[releases page](https://github.com/Megjafari/platform-pipelines/releases).
+
+## How this repository tests itself
+
+- `ci*.yml`, `docs.yml` and `pr-checks.yml` call the workflows through local paths,
+  so a pull request tests its own changes.
+- [`consumer-demo.yml`](.github/workflows/consumer-demo.yml) calls the library at
+  `@v1`, the way another repository would.
+- [`workflow-tests.yml`](.github/workflows/workflow-tests.yml) proves that the
+  security gates stop what they should stop.
+
 ## Repository layout
 
 ```
 .github/workflows/   workflows (reusable-*.yml are the library, the rest is this repo's own CI)
-.github/actions/     composite actions shared between workflows
 examples/            small apps the workflows are tested against
 policies/            Rego policies used by conftest
 docs/                architecture notes and ADRs
@@ -131,7 +335,7 @@ docs/                architecture notes and ADRs
 
 ## Development
 
-Linting runs through Docker so nothing needs to be installed locally:
+Linting runs through Docker, so nothing else needs to be installed:
 
 ```bash
 make lint
@@ -140,7 +344,7 @@ make lint
 ## Principles
 
 - **Least privilege:** every workflow declares its own minimal `permissions:`.
-- **Pinned and updated:** actions are pinned and kept current by Renovate.
+- **Pinned and updated:** actions are pinned to digests and kept current by Renovate.
 - **Tested:** workflows are linted, and security gates have negative tests.
 - **Decisions are written down:** see [docs/adr](docs/adr).
 
