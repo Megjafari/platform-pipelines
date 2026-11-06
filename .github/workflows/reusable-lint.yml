@@ -68,8 +68,13 @@ jobs:
         run: pip install --quiet "yamllint==${VERSION}"
       - name: Run yamllint
         env:
-          STRICT: ${{ inputs.yamllint-strict && '--strict' || '' }}
-        run: yamllint $STRICT .
+          STRICT: ${{ inputs.yamllint-strict }}
+        run: |
+          if [ "$STRICT" = "true" ]; then
+            yamllint --strict .
+          else
+            yamllint .
+          fi
 
   gitleaks:
     name: gitleaks
