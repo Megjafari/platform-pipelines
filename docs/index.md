@@ -4,6 +4,8 @@ A library of reusable CI/CD workflows. See the
 [repository](https://github.com/Megjafari/platform-pipelines) for the catalog and
 usage examples.
 
+Start with the [architecture](architecture.md).
+
 ## Decisions
 
 The reasoning behind the design is recorded as architecture decision records:
