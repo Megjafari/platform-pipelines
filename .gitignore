@@ -7,3 +7,4 @@ actionlint
 bin/
 obj/
 node_modules/
+site/
