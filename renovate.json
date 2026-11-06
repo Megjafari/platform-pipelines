@@ -5,12 +5,23 @@
     "helpers:pinGitHubActionDigests",
     ":semanticCommits"
   ],
-  "labels": ["dependencies"],
+  "labels": [
+    "dependencies"
+  ],
   "packageRules": [
     {
       "description": "Keep GitHub Actions updates in one PR",
-      "matchManagers": ["github-actions"],
+      "matchManagers": [
+        "github-actions"
+      ],
       "groupName": "github-actions"
+    },
+    {
+      "description": "The consumer demo must keep calling the library at @v1",
+      "matchFileNames": [
+        ".github/workflows/consumer-demo.yml"
+      ],
+      "enabled": false
     }
   ]
 }
