@@ -10,9 +10,22 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel on main: a cancelled run could leave an image pushed but unsigned.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # This repository tests its own library: the same workflow consumers call.
+  # This repository tests its own library: the same workflows consumers call.
   lint:
     uses: ./.github/workflows/reusable-lint.yml
+
+  container:
+    uses: ./.github/workflows/reusable-container.yml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    with:
+      context: examples/hello-web
+      image: ghcr.io/${{ github.repository }}/hello-web
+      attest: ${{ !github.event.repository.private }}
