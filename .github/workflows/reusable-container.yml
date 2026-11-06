@@ -81,7 +81,7 @@ jobs:
       image: ${{ steps.vars.outputs.image }}
       digest: ${{ steps.vars.outputs.push == 'true' && steps.build.outputs.digest || '' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Resolve image name and push decision
         id: vars
@@ -95,12 +95,12 @@ jobs:
             echo "push=${PUSH}"
           } >> "$GITHUB_OUTPUT"
 
-      - uses: docker/setup-qemu-action@v4
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Log in to GHCR
         if: steps.vars.outputs.push == 'true'
-        uses: docker/login-action@v4
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -108,7 +108,7 @@ jobs:
 
       - name: Generate tags and labels
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ${{ steps.vars.outputs.image }}
           tags: |
@@ -136,7 +136,7 @@ jobs:
 
       # Built separately so that nothing reaches the registry before the gate.
       - name: Build image for scanning
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: ${{ inputs.context }}
           file: ${{ inputs.dockerfile }}
@@ -153,7 +153,7 @@ jobs:
 
       - name: Build multi-arch image and push
         id: build
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: ${{ inputs.context }}
           file: ${{ inputs.dockerfile }}
@@ -168,7 +168,7 @@ jobs:
       # Everything below works on the digest, never on a tag: a tag can be moved.
       - name: Generate SBOM
         if: steps.vars.outputs.push == 'true'
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           image: ${{ steps.vars.outputs.image }}@${{ steps.build.outputs.digest }}
           registry-username: ${{ github.actor }}
@@ -178,7 +178,7 @@ jobs:
           artifact-name: sbom.spdx.json
           dependency-snapshot: false
 
-      - uses: sigstore/cosign-installer@v4.1.3
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
         if: steps.vars.outputs.push == 'true'
 
       - name: Sign image with cosign (keyless)
@@ -189,7 +189,7 @@ jobs:
 
       - name: Attest build provenance
         if: steps.vars.outputs.push == 'true' && inputs.attest
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-name: ${{ steps.vars.outputs.image }}
           subject-digest: ${{ steps.build.outputs.digest }}
@@ -197,7 +197,7 @@ jobs:
 
       - name: Attest SBOM
         if: steps.vars.outputs.push == 'true' && inputs.attest
-        uses: actions/attest-sbom@v4
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4
         with:
           subject-name: ${{ steps.vars.outputs.image }}
           subject-digest: ${{ steps.build.outputs.digest }}
