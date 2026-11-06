@@ -1,0 +1,76 @@
+name: Workflow tests
+
+# Negative tests: each job feeds a security gate something it must stop. Tools run
+# with a custom exit code, so that a crash or a failed download cannot pass as "blocked".
+# The Rego policies have their own negative tests, run by `conftest verify` in ci-iac.yml.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "41 4 * * 1"
+
+permissions:
+  contents: read
+
+env:
+  BLOCKED: "42"
+
+jobs:
+  trivy-blocks-vulnerable-image:
+    name: Trivy blocks a vulnerable image
+    runs-on: ubuntu-latest
+    env:
+      VERSION: "0.76.2" # same as reusable-container
+      IMAGE: alpine:3.10.0 # old on purpose, has known fixed CVEs
+      TRIVY_SCANNERS: vuln
+      TRIVY_SEVERITY: CRITICAL,HIGH
+      TRIVY_IGNORE_UNFIXED: "true"
+    steps:
+      - name: Install Trivy (checksum verified)
+        run: |
+          cd "$RUNNER_TEMP"
+          base="https://github.com/aquasecurity/trivy/releases/download/v${VERSION}"
+          archive="trivy_${VERSION}_Linux-64bit.tar.gz"
+          curl -fsSLO "${base}/${archive}"
+          curl -fsSLO "${base}/trivy_${VERSION}_checksums.txt"
+          grep " ${archive}\$" "trivy_${VERSION}_checksums.txt" | sha256sum -c -
+          tar -xzf "${archive}" trivy
+
+      - name: Expect the gate to block
+        run: |
+          code=0
+          "$RUNNER_TEMP/trivy" image --exit-code "$BLOCKED" "$IMAGE" || code=$?
+          if [ "$code" -ne "$BLOCKED" ]; then
+            echo "::error::Expected Trivy to block $IMAGE (exit $BLOCKED), got exit $code"
+            exit 1
+          fi
+
+  gitleaks-finds-secret:
+    name: gitleaks finds a committed secret
+    runs-on: ubuntu-latest
+    env:
+      VERSION: "8.21.2" # same as reusable-lint
+    steps:
+      - name: Install gitleaks (checksum verified)
+        run: |
+          cd "$RUNNER_TEMP"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}"
+          archive="gitleaks_${VERSION}_linux_x64.tar.gz"
+          curl -fsSLO "${base}/${archive}"
+          curl -fsSLO "${base}/gitleaks_${VERSION}_checksums.txt"
+          grep " ${archive}\$" "gitleaks_${VERSION}_checksums.txt" | sha256sum -c -
+          tar -xzf "${archive}" gitleaks
+
+      # The fake token is generated here, so that no secret-like string is committed.
+      - name: Expect the scan to find a fake token
+        run: |
+          mkdir "$RUNNER_TEMP/leak"
+          echo "token = \"ghp_$(openssl rand -hex 18)\"" > "$RUNNER_TEMP/leak/config.txt"
+          code=0
+          "$RUNNER_TEMP/gitleaks" detect --no-git --redact --exit-code "$BLOCKED" --source "$RUNNER_TEMP/leak" || code=$?
+          if [ "$code" -ne "$BLOCKED" ]; then
+            echo "::error::Expected gitleaks to find the fake token (exit $BLOCKED), got exit $code"
+            exit 1
+          fi
