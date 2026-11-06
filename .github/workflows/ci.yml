@@ -18,6 +18,12 @@ jobs:
   lint:
     uses: ./.github/workflows/reusable-lint.yml
 
+  dotnet:
+    uses: ./.github/workflows/reusable-dotnet-ci.yml
+    with:
+      working-directory: examples/dotnet-api
+      publish-project: src/HelloApi/HelloApi.csproj
+
   container:
     uses: ./.github/workflows/reusable-container.yml
     permissions:

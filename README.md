@@ -13,7 +13,7 @@ jobs:
 
 Fix something once here, and every consumer gets it by bumping the version.
 
-> **Status:** under construction. Scaffold, `reusable-lint` and `reusable-container` are done.
+> **Status:** under construction. Scaffold, `reusable-lint`, `reusable-container` and `reusable-dotnet-ci` are done.
 > The catalog below shows what is planned and what already exists.
 
 ## Catalog
@@ -21,7 +21,7 @@ Fix something once here, and every consumer gets it by bumping the version.
 | Workflow | Purpose | Status |
 | --- | --- | --- |
 | [`reusable-lint`](#reusable-lint) | actionlint, yamllint, gitleaks | available |
-| `reusable-dotnet-ci` | .NET 10 build, test, coverage, format check | planned |
+| [`reusable-dotnet-ci`](#reusable-dotnet-ci) | .NET 10 build, test, coverage, format check | available |
 | `reusable-node-ci` | npm / pnpm / yarn: lint, typecheck, test, build | planned |
 | [`reusable-container`](#reusable-container) | multi-arch build, SBOM, Trivy, cosign, provenance, GHCR | available |
 | `reusable-iac-validate` | Terraform, kubeconform, conftest policies | planned |
@@ -54,6 +54,29 @@ jobs:
 | `actionlint-version` | `1.7.7` | Pinned tool version |
 | `yamllint-version` | `1.35.1` | Pinned tool version |
 | `gitleaks-version` | `8.21.2` | Pinned tool version |
+
+### reusable-dotnet-ci
+
+Restores, checks formatting, builds and tests, and uploads test results and
+coverage (Cobertura) as artifacts. Test projects need the `coverlet.collector`
+package for coverage. Can also publish a project as an artifact.
+
+```yaml
+jobs:
+  dotnet:
+    uses: OWNER/platform-pipelines/.github/workflows/reusable-dotnet-ci.yml@v1
+    with:
+      dotnet-version: "10.0.x"
+      working-directory: src
+```
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `dotnet-version` | `10.0.x` | .NET SDK version |
+| `working-directory` | `.` | Directory with the solution or project |
+| `configuration` | `Release` | Build configuration |
+| `run-format` | `true` | Fail if `dotnet format` would change anything |
+| `publish-project` | empty | Project to publish as an artifact, relative to `working-directory` |
 
 ### reusable-container
 
