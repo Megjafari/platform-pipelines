@@ -1,0 +1,45 @@
+name: Reusable / Dependency review
+
+# Blocks pull requests that add dependencies with known vulnerabilities or
+# unwanted licenses. Must be called from a pull_request event.
+#
+# Usage:
+#   on: pull_request
+#   jobs:
+#     dependency-review:
+#       uses: Megjafari/platform-pipelines/.github/workflows/reusable-dependency-review.yml@v1
+
+on:
+  workflow_call:
+    inputs:
+      fail-on-severity:
+        description: Lowest severity that fails the check (low, moderate, high, critical)
+        type: string
+        default: high
+      deny-licenses:
+        description: Comma-separated SPDX licenses to block
+        type: string
+        default: AGPL-3.0-only, AGPL-3.0-or-later
+      comment-summary:
+        description: When to post a summary on the PR (always, on-failure, never)
+        type: string
+        default: on-failure
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    name: dependency review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/dependency-review-action@v5.0.0
+        with:
+          fail-on-severity: ${{ inputs.fail-on-severity }}
+          deny-licenses: ${{ inputs.deny-licenses }}
+          comment-summary-in-pr: ${{ inputs.comment-summary }}
