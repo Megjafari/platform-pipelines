@@ -1,0 +1,128 @@
+name: Reusable / Lighthouse
+
+# Measures a site with Lighthouse CI and fails when a category drops below its
+# budget. Set either static-dir (a built site in the repository) or url (a
+# deployed site). Takes the median of several runs, because scores vary a little.
+#
+# Usage:
+#   jobs:
+#     lighthouse:
+#       uses: Megjafari/platform-pipelines/.github/workflows/reusable-lighthouse.yml@v1
+#       with:
+#         static-dir: dist
+
+on:
+  workflow_call:
+    inputs:
+      static-dir:
+        description: Directory with a built site, relative to the repository root
+        type: string
+        default: ""
+      url:
+        description: URL of a deployed site (used when static-dir is empty)
+        type: string
+        default: ""
+      runs:
+        description: Number of Lighthouse runs per page
+        type: number
+        default: 3
+      min-performance:
+        type: number
+        default: 0.9
+      min-accessibility:
+        type: number
+        default: 0.9
+      min-best-practices:
+        type: number
+        default: 0.9
+      min-seo:
+        type: number
+        default: 0.9
+      lhci-version:
+        type: string
+        default: "0.16.0"
+      node-version:
+        type: string
+        default: "24"
+
+permissions:
+  contents: read
+
+jobs:
+  lighthouse:
+    name: lighthouse
+    runs-on: ubuntu-latest
+    env:
+      STATIC_DIR: ${{ inputs.static-dir }}
+      URL: ${{ inputs.url }}
+      RUNS: ${{ inputs.runs }}
+      MIN_PERFORMANCE: ${{ inputs.min-performance }}
+      MIN_ACCESSIBILITY: ${{ inputs.min-accessibility }}
+      MIN_BEST_PRACTICES: ${{ inputs.min-best-practices }}
+      MIN_SEO: ${{ inputs.min-seo }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          package-manager-cache: false
+
+      - name: Write Lighthouse CI config
+        run: |
+          node --input-type=module > "$RUNNER_TEMP/lighthouserc.json" <<'EOF_SCRIPT'
+          const { STATIC_DIR, URL, RUNS, RUNNER_TEMP } = process.env;
+          if (!STATIC_DIR && !URL) {
+            console.error("Set either the static-dir or the url input");
+            process.exit(1);
+          }
+          const budget = (name) => ["error", { minScore: Number(process.env[name]) }];
+          console.log(JSON.stringify({
+            ci: {
+              collect: {
+                ...(STATIC_DIR ? { staticDistDir: STATIC_DIR } : { url: [URL] }),
+                numberOfRuns: Number(RUNS),
+                settings: { chromeFlags: "--no-sandbox --headless=new" },
+              },
+              assert: {
+                assertions: {
+                  "categories:performance": budget("MIN_PERFORMANCE"),
+                  "categories:accessibility": budget("MIN_ACCESSIBILITY"),
+                  "categories:best-practices": budget("MIN_BEST_PRACTICES"),
+                  "categories:seo": budget("MIN_SEO"),
+                },
+              },
+              upload: { target: "filesystem", outputDir: `${RUNNER_TEMP}/lighthouse` },
+            },
+          }));
+          EOF_SCRIPT
+
+      - name: Run Lighthouse CI
+        env:
+          VERSION: ${{ inputs.lhci-version }}
+        run: npx --yes "@lhci/cli@${VERSION}" autorun --config="$RUNNER_TEMP/lighthouserc.json"
+
+      - name: Write summary
+        if: ${{ !cancelled() }}
+        run: |
+          node --input-type=module >> "$GITHUB_STEP_SUMMARY" <<'EOF_SCRIPT'
+          import { existsSync, readFileSync } from "node:fs";
+          const path = `${process.env.RUNNER_TEMP}/lighthouse/manifest.json`;
+          if (existsSync(path)) {
+            console.log("| URL | Performance | Accessibility | Best practices | SEO |\n| --- | --- | --- | --- | --- |");
+            for (const run of JSON.parse(readFileSync(path)).filter((r) => r.isRepresentativeRun)) {
+              const s = run.summary;
+              const score = (name) => Math.round(s[name] * 100);
+              const scores = [score("performance"), score("accessibility"), score("best-practices"), score("seo")];
+              console.log(`| ${run.url} | ${scores.join(" | ")} |`);
+            }
+          }
+          EOF_SCRIPT
+
+      - name: Upload reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: lighthouse-reports
+          path: ${{ runner.temp }}/lighthouse
+          if-no-files-found: warn
