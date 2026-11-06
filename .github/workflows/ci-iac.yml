@@ -1,0 +1,17 @@
+name: CI / IaC
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  iac:
+    uses: ./.github/workflows/reusable-iac-validate.yml
+    with:
+      terraform-directory: examples/iac/terraform
+      kubernetes-directory: examples/iac/kubernetes
+      policy-directory: policies
