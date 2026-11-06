@@ -1,0 +1,99 @@
+name: Reusable / Lint
+
+# Lints GitHub Actions workflows (actionlint), YAML (yamllint) and scans the
+# repository history for committed secrets (gitleaks).
+#
+# Usage:
+#   jobs:
+#     lint:
+#       uses: Megjafari/platform-pipelines/.github/workflows/reusable-lint.yml@v1
+
+on:
+  workflow_call:
+    inputs:
+      run-actionlint:
+        description: Lint GitHub Actions workflows with actionlint
+        type: boolean
+        default: true
+      run-yamllint:
+        description: Lint YAML files with yamllint (uses the caller's .yamllint config if present)
+        type: boolean
+        default: true
+      run-gitleaks:
+        description: Scan the git history for secrets with gitleaks (uses the caller's .gitleaks.toml if present)
+        type: boolean
+        default: true
+      yamllint-strict:
+        description: Treat yamllint warnings as errors
+        type: boolean
+        default: true
+      actionlint-version:
+        type: string
+        default: "1.7.7"
+      yamllint-version:
+        type: string
+        default: "1.35.1"
+      gitleaks-version:
+        type: string
+        default: "8.21.2"
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: actionlint
+    if: inputs.run-actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install actionlint
+        env:
+          VERSION: ${{ inputs.actionlint-version }}
+        run: |
+          cd "$RUNNER_TEMP"
+          bash <(curl -fsSL "https://raw.githubusercontent.com/rhysd/actionlint/v${VERSION}/scripts/download-actionlint.bash") "${VERSION}"
+      - name: Run actionlint
+        run: '"$RUNNER_TEMP/actionlint" -color'
+
+  yamllint:
+    name: yamllint
+    if: inputs.run-yamllint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install yamllint
+        env:
+          VERSION: ${{ inputs.yamllint-version }}
+        run: pip install --quiet "yamllint==${VERSION}"
+      - name: Run yamllint
+        env:
+          STRICT: ${{ inputs.yamllint-strict }}
+        run: |
+          if [ "$STRICT" = "true" ]; then
+            yamllint --strict .
+          else
+            yamllint .
+          fi
+
+  gitleaks:
+    name: gitleaks
+    if: inputs.run-gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks (checksum verified)
+        env:
+          VERSION: ${{ inputs.gitleaks-version }}
+        run: |
+          cd "$RUNNER_TEMP"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}"
+          archive="gitleaks_${VERSION}_linux_x64.tar.gz"
+          curl -fsSLO "${base}/${archive}"
+          curl -fsSLO "${base}/gitleaks_${VERSION}_checksums.txt"
+          grep " ${archive}\$" "gitleaks_${VERSION}_checksums.txt" | sha256sum -c -
+          tar -xzf "${archive}" gitleaks
+      - name: Run gitleaks
+        run: '"$RUNNER_TEMP/gitleaks" detect --source . --redact --verbose'

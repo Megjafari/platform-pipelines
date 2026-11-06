@@ -13,14 +13,14 @@ jobs:
 
 Fix something once here, and every consumer gets it by bumping the version.
 
-> **Status:** under construction. Phase 1 (scaffold and basic CI) is done.
+> **Status:** under construction. Phases 1 (scaffold) and 2 (`reusable-lint`) are done.
 > The catalog below shows what is planned and what already exists.
 
 ## Catalog
 
 | Workflow | Purpose | Status |
 | --- | --- | --- |
-| `reusable-lint` | actionlint, yamllint, gitleaks | planned (phase 2) |
+| [`reusable-lint`](#reusable-lint) | actionlint, yamllint, gitleaks | available |
 | `reusable-dotnet-ci` | .NET 10 build, test, coverage, format check | planned |
 | `reusable-node-ci` | npm / pnpm / yarn: lint, typecheck, test, build | planned |
 | `reusable-container` | multi-arch build, SBOM, Trivy, cosign, provenance, GHCR | planned |
@@ -31,6 +31,29 @@ Fix something once here, and every consumer gets it by bumping the version.
 | `reusable-codeql` | SAST for C# and JavaScript | planned |
 | `reusable-dependency-review` | block vulnerable or badly licensed dependencies | planned |
 | `reusable-lighthouse` | performance / accessibility budgets | planned |
+
+### reusable-lint
+
+Lints GitHub Actions workflows (actionlint), YAML (yamllint) and scans the git
+history for secrets (gitleaks, checksum-verified install).
+
+```yaml
+jobs:
+  lint:
+    uses: OWNER/platform-pipelines/.github/workflows/reusable-lint.yml@v1
+    permissions:
+      contents: read
+```
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `run-actionlint` | `true` | Lint workflows with actionlint |
+| `run-yamllint` | `true` | Lint YAML; uses the caller's `.yamllint` if present |
+| `run-gitleaks` | `true` | Scan history for secrets; uses the caller's `.gitleaks.toml` if present |
+| `yamllint-strict` | `true` | Treat yamllint warnings as errors |
+| `actionlint-version` | `1.7.7` | Pinned tool version |
+| `yamllint-version` | `1.35.1` | Pinned tool version |
+| `gitleaks-version` | `8.21.2` | Pinned tool version |
 
 ## Repository layout
 
