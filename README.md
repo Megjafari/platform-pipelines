@@ -82,4 +82,4 @@ make lint
 
 ## License
 
-To be decided before the repository is made public.
+[MIT](LICENSE)
