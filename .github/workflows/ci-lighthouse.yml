@@ -1,0 +1,15 @@
+name: CI / Lighthouse
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lighthouse:
+    uses: ./.github/workflows/reusable-lighthouse.yml
+    with:
+      static-dir: examples/hello-web
