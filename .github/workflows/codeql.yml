@@ -20,4 +20,4 @@ jobs:
       security-events: write
     with:
       # "actions" also scans this repository's own workflows for security problems.
-      languages: '["csharp", "actions"]'
+      languages: '["csharp", "javascript-typescript", "actions"]'
