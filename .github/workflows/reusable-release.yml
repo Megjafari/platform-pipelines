@@ -1,0 +1,67 @@
+name: Reusable / Release
+
+# Runs release-please: Conventional Commits on the default branch become a
+# release PR with a changelog, and merging it creates the tag and GitHub release.
+# Optionally moves a floating major tag (v1) to the new release.
+#
+# Needs a release-please-config.json and .release-please-manifest.json, and the
+# repository setting "Allow GitHub Actions to create and approve pull requests".
+#
+# Usage:
+#   jobs:
+#     release:
+#       uses: Megjafari/platform-pipelines/.github/workflows/reusable-release.yml@v1
+#       permissions:
+#         contents: write
+#         pull-requests: write
+
+on:
+  workflow_call:
+    inputs:
+      update-major-tag:
+        description: Move the floating major tag (for example v1) to each release
+        type: boolean
+        default: false
+    outputs:
+      release-created:
+        description: Whether a release was created
+        value: ${{ jobs.release.outputs.release-created }}
+      tag-name:
+        description: Tag of the new release
+        value: ${{ jobs.release.outputs.tag-name }}
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: release-please
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release-created: ${{ steps.release.outputs.release_created }}
+      tag-name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@v5.0.0
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - uses: actions/checkout@v7
+        if: inputs.update-major-tag && steps.release.outputs.release_created == 'true'
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Move major tag
+        if: inputs.update-major-tag && steps.release.outputs.release_created == 'true'
+        env:
+          MAJOR: v${{ steps.release.outputs.major }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          git tag --force "$MAJOR" "$TAG"
+          git push --force origin "refs/tags/$MAJOR"
