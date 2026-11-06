@@ -1,0 +1,223 @@
+name: Reusable / Container
+
+# Builds a multi-arch image, blocks it on Trivy findings and only then pushes it
+# to GHCR, followed by SBOM, keyless signing, attestations and verification.
+# Pull requests are built and scanned but never pushed.
+#
+# Usage:
+#   jobs:
+#     container:
+#       uses: Megjafari/platform-pipelines/.github/workflows/reusable-container.yml@v1
+#       permissions:
+#         contents: read
+#         packages: write
+#         id-token: write
+#         attestations: write
+
+on:
+  workflow_call:
+    inputs:
+      context:
+        description: Docker build context
+        type: string
+        default: "."
+      dockerfile:
+        description: Path to the Dockerfile (defaults to <context>/Dockerfile)
+        type: string
+        default: ""
+      image:
+        description: Image name without tag (defaults to ghcr.io/<owner>/<repo>)
+        type: string
+        default: ""
+      platforms:
+        description: Target platforms
+        type: string
+        default: linux/amd64,linux/arm64
+      push:
+        description: Push the image (never happens on pull_request events)
+        type: boolean
+        default: true
+      attest:
+        description: Create GitHub attestations (needs a public repository, or GitHub Enterprise for private ones)
+        type: boolean
+        default: true
+      trivy-severity:
+        description: Severities that fail the build
+        type: string
+        default: CRITICAL,HIGH
+      trivy-ignore-unfixed:
+        description: Ignore vulnerabilities without an available fix
+        type: boolean
+        default: true
+      trivy-version:
+        type: string
+        default: "0.76.2"
+    outputs:
+      image:
+        description: Image name, lowercased
+        value: ${{ jobs.container.outputs.image }}
+      digest:
+        description: Digest of the pushed image (empty when nothing was pushed)
+        value: ${{ jobs.container.outputs.digest }}
+
+permissions:
+  contents: read
+
+jobs:
+  container:
+    name: build, scan, push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # keyless signing and attestations
+      attestations: write
+    env:
+      TRIVY_EXIT_CODE: "1"
+      TRIVY_SCANNERS: vuln
+      TRIVY_SEVERITY: ${{ inputs.trivy-severity }}
+      TRIVY_IGNORE_UNFIXED: ${{ inputs.trivy-ignore-unfixed }}
+    outputs:
+      image: ${{ steps.vars.outputs.image }}
+      digest: ${{ steps.vars.outputs.push == 'true' && steps.build.outputs.digest || '' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve image name and push decision
+        id: vars
+        env:
+          INPUT_IMAGE: ${{ inputs.image }}
+          PUSH: ${{ inputs.push && github.event_name != 'pull_request' }}
+        run: |
+          image="${INPUT_IMAGE:-ghcr.io/${GITHUB_REPOSITORY}}"
+          {
+            echo "image=${image,,}"
+            echo "push=${PUSH}"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        if: steps.vars.outputs.push == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Generate tags and labels
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ steps.vars.outputs.image }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=sha
+
+      - name: Install Trivy (checksum verified)
+        env:
+          VERSION: ${{ inputs.trivy-version }}
+        run: |
+          cd "$RUNNER_TEMP"
+          base="https://github.com/aquasecurity/trivy/releases/download/v${VERSION}"
+          archive="trivy_${VERSION}_Linux-64bit.tar.gz"
+          curl -fsSLO "${base}/${archive}"
+          curl -fsSLO "${base}/trivy_${VERSION}_checksums.txt"
+          grep " ${archive}\$" "trivy_${VERSION}_checksums.txt" | sha256sum -c -
+          tar -xzf "${archive}" trivy
+
+      - name: Scan dependencies in the build context
+        env:
+          CONTEXT: ${{ inputs.context }}
+        run: '"$RUNNER_TEMP/trivy" fs "$CONTEXT"'
+
+      # Built separately so that nothing reaches the registry before the gate.
+      - name: Build image for scanning
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          platforms: linux/amd64
+          load: true
+          push: false
+          provenance: false
+          tags: local-scan:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan image
+        run: '"$RUNNER_TEMP/trivy" image "local-scan:${GITHUB_SHA}"'
+
+      - name: Build multi-arch image and push
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          platforms: ${{ inputs.platforms }}
+          push: ${{ steps.vars.outputs.push == 'true' }}
+          provenance: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Everything below works on the digest, never on a tag: a tag can be moved.
+      - name: Generate SBOM
+        if: steps.vars.outputs.push == 'true'
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.vars.outputs.image }}@${{ steps.build.outputs.digest }}
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ github.token }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          artifact-name: sbom.spdx.json
+          dependency-snapshot: false
+
+      - uses: sigstore/cosign-installer@v4.1.3
+        if: steps.vars.outputs.push == 'true'
+
+      - name: Sign image with cosign (keyless)
+        if: steps.vars.outputs.push == 'true'
+        env:
+          REF: ${{ steps.vars.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "$REF"
+
+      - name: Attest build provenance
+        if: steps.vars.outputs.push == 'true' && inputs.attest
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ steps.vars.outputs.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest SBOM
+        if: steps.vars.outputs.push == 'true' && inputs.attest
+        uses: actions/attest-sbom@v4
+        with:
+          subject-name: ${{ steps.vars.outputs.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          sbom-path: sbom.spdx.json
+          push-to-registry: true
+
+      # Prove the published image can be verified the way a consumer would do it.
+      - name: Verify signature
+        if: steps.vars.outputs.push == 'true'
+        env:
+          REF: ${{ steps.vars.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: |
+          cosign verify "$REF" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp '^https://github\.com/.+/\.github/workflows/reusable-container\.yml@' \
+            --certificate-github-workflow-repository "$GITHUB_REPOSITORY"
+
+      - name: Verify provenance attestation
+        if: steps.vars.outputs.push == 'true' && inputs.attest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: oci://${{ steps.vars.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: gh attestation verify "$REF" --owner "$GITHUB_REPOSITORY_OWNER"

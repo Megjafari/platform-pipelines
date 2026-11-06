@@ -13,7 +13,7 @@ jobs:
 
 Fix something once here, and every consumer gets it by bumping the version.
 
-> **Status:** under construction. Phases 1 (scaffold) and 2 (`reusable-lint`) are done.
+> **Status:** under construction. Scaffold, `reusable-lint` and `reusable-container` are done.
 > The catalog below shows what is planned and what already exists.
 
 ## Catalog
@@ -23,7 +23,7 @@ Fix something once here, and every consumer gets it by bumping the version.
 | [`reusable-lint`](#reusable-lint) | actionlint, yamllint, gitleaks | available |
 | `reusable-dotnet-ci` | .NET 10 build, test, coverage, format check | planned |
 | `reusable-node-ci` | npm / pnpm / yarn: lint, typecheck, test, build | planned |
-| `reusable-container` | multi-arch build, SBOM, Trivy, cosign, provenance, GHCR | planned |
+| [`reusable-container`](#reusable-container) | multi-arch build, SBOM, Trivy, cosign, provenance, GHCR | available |
 | `reusable-iac-validate` | Terraform, kubeconform, conftest policies | planned |
 | `reusable-release` | conventional commits and release-please | planned |
 | `reusable-docs-site` | Markdown to GitHub Pages | planned |
@@ -54,6 +54,47 @@ jobs:
 | `actionlint-version` | `1.7.7` | Pinned tool version |
 | `yamllint-version` | `1.35.1` | Pinned tool version |
 | `gitleaks-version` | `8.21.2` | Pinned tool version |
+
+### reusable-container
+
+Scans the build context, builds a local image and scans that too. Only if both
+pass does it build for all platforms and push to GHCR. After the push it creates
+an SPDX SBOM, signs with cosign (keyless) and adds GitHub attestations, all on the
+digest, and then verifies the result. Pull requests build and scan but never push.
+
+```yaml
+jobs:
+  container:
+    uses: OWNER/platform-pipelines/.github/workflows/reusable-container.yml@v1
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+```
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `context` | `.` | Docker build context |
+| `dockerfile` | `<context>/Dockerfile` | Path to the Dockerfile |
+| `image` | `ghcr.io/<owner>/<repo>` | Image name without tag |
+| `platforms` | `linux/amd64,linux/arm64` | Target platforms |
+| `push` | `true` | Push the image (never on `pull_request`) |
+| `attest` | `true` | GitHub attestations; set `false` on private repositories without Enterprise |
+| `trivy-severity` | `CRITICAL,HIGH` | Severities that fail the build |
+| `trivy-ignore-unfixed` | `true` | Ignore vulnerabilities without a fix |
+| `trivy-version` | `0.76.2` | Pinned tool version |
+
+Outputs: `image` and `digest` (empty when nothing was pushed).
+
+Verify a published image:
+
+```bash
+cosign verify ghcr.io/OWNER/IMAGE@sha256:DIGEST \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/.+/\.github/workflows/reusable-container\.yml@' \
+  --certificate-github-workflow-repository OWNER/REPO
+```
 
 ## Repository layout
 
