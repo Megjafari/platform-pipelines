@@ -3,8 +3,8 @@
   "packages": {
     ".": {
       "release-type": "simple",
-      "package-name": "platform-pipelines",
-      "release-as": "1.0.0"
+      "package-name": "platform-pipelines"
     }
-  }
+  },
+  "include-component-in-tag": false
 }
