@@ -1,0 +1,104 @@
+name: Reusable / .NET CI
+
+# Restores, checks formatting, builds and tests a .NET solution, and collects
+# code coverage. Optionally publishes a project as a build artifact.
+#
+# Usage:
+#   jobs:
+#     dotnet:
+#       uses: Megjafari/platform-pipelines/.github/workflows/reusable-dotnet-ci.yml@v1
+#       with:
+#         dotnet-version: "10.0.x"
+
+on:
+  workflow_call:
+    inputs:
+      dotnet-version:
+        description: .NET SDK version
+        type: string
+        default: "10.0.x"
+      working-directory:
+        description: Directory containing the solution or project
+        type: string
+        default: "."
+      configuration:
+        description: Build configuration
+        type: string
+        default: Release
+      run-format:
+        description: Fail if `dotnet format` would change anything
+        type: boolean
+        default: true
+      publish-project:
+        description: Project to `dotnet publish` as an artifact (skipped when empty)
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  build-test:
+    name: build and test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    env:
+      CONFIGURATION: ${{ inputs.configuration }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Check formatting
+        if: inputs.run-format
+        run: dotnet format --verify-no-changes --no-restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration "$CONFIGURATION"
+
+      - name: Test with coverage
+        run: >-
+          dotnet test --no-build --configuration "$CONFIGURATION"
+          --logger trx
+          --collect:"XPlat Code Coverage"
+          --results-directory "$RUNNER_TEMP/test-results"
+
+      - name: Upload test results and coverage
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: dotnet-test-results
+          path: ${{ runner.temp }}/test-results
+          if-no-files-found: warn
+
+      - name: Publish
+        if: inputs.publish-project != ''
+        env:
+          PROJECT: ${{ inputs.publish-project }}
+        run: dotnet publish "$PROJECT" --no-build --configuration "$CONFIGURATION" --output "$RUNNER_TEMP/publish"
+
+      - name: Upload published output
+        if: inputs.publish-project != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: dotnet-publish
+          path: ${{ runner.temp }}/publish
+          if-no-files-found: error
