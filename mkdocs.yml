@@ -1,0 +1,5 @@
+site_name: platform-pipelines
+site_description: Reusable CI/CD workflows
+repo_url: https://github.com/Megjafari/platform-pipelines
+theme:
+  name: material

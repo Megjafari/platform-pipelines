@@ -1,0 +1,79 @@
+name: Reusable / Docs site
+
+# Builds a MkDocs Material site and optionally deploys it to GitHub Pages.
+# Broken links fail the build. Deploying needs Pages set to "GitHub Actions" in
+# the repository settings.
+#
+# Usage:
+#   jobs:
+#     docs:
+#       uses: Megjafari/platform-pipelines/.github/workflows/reusable-docs-site.yml@v1
+#       permissions:
+#         contents: read
+#         pages: write
+#         id-token: write
+#       with:
+#         deploy: ${{ github.ref == 'refs/heads/main' }}
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: Directory containing mkdocs.yml
+        type: string
+        default: "."
+      deploy:
+        description: Deploy the site to GitHub Pages
+        type: boolean
+        default: false
+      python-version:
+        type: string
+        default: "3.13"
+      mkdocs-material-version:
+        type: string
+        default: "9.8.0"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: Install MkDocs Material
+        env:
+          VERSION: ${{ inputs.mkdocs-material-version }}
+        run: pip install --quiet "mkdocs-material==${VERSION}"
+
+      - name: Build site
+        run: mkdocs build --strict --site-dir "$RUNNER_TEMP/site"
+
+      - uses: actions/upload-pages-artifact@v5.0.0
+        with:
+          path: ${{ runner.temp }}/site
+
+  deploy:
+    name: deploy
+    if: inputs.deploy
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5.0.1
