@@ -1,0 +1,27 @@
+name: Consumer demo
+
+# Calls the library the way another repository would: by full name at a released
+# version, not through a local path. This proves that @v1 works from the outside,
+# while ci.yml tests the code in the current branch.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    uses: Megjafari/platform-pipelines/.github/workflows/reusable-lint.yml@v1
+
+  node:
+    uses: Megjafari/platform-pipelines/.github/workflows/reusable-node-ci.yml@v1
+    with:
+      working-directory: examples/node-web
+
+  dotnet:
+    uses: Megjafari/platform-pipelines/.github/workflows/reusable-dotnet-ci.yml@v1
+    with:
+      working-directory: examples/dotnet-api
