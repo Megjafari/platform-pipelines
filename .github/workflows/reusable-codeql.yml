@@ -1,0 +1,57 @@
+name: Reusable / CodeQL
+
+# Static security analysis (SAST). Runs without building the code, and results
+# appear under the repository's Security tab. Free for public repositories.
+#
+# Usage:
+#   jobs:
+#     codeql:
+#       uses: Megjafari/platform-pipelines/.github/workflows/reusable-codeql.yml@v1
+#       permissions:
+#         actions: read
+#         contents: read
+#         packages: read
+#         security-events: write
+#       with:
+#         languages: '["csharp", "javascript-typescript"]'
+
+on:
+  workflow_call:
+    inputs:
+      languages:
+        description: JSON list of CodeQL languages. Each must have source code in the repository.
+        type: string
+        default: '["csharp", "javascript-typescript"]'
+      queries:
+        description: Query suite
+        type: string
+        default: security-extended
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(inputs.languages) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: ${{ inputs.queries }}
+
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
