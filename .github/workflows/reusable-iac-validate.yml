@@ -1,0 +1,133 @@
+name: Reusable / IaC validate
+
+# Validates Terraform (fmt, validate, tflint) and Kubernetes manifests
+# (kubeconform), and enforces Rego policies with conftest. Each part only runs
+# when its directory input is set. No credentials or remote state are needed.
+#
+# Usage:
+#   jobs:
+#     iac:
+#       uses: Megjafari/platform-pipelines/.github/workflows/reusable-iac-validate.yml@v1
+#       with:
+#         terraform-directory: terraform
+#         kubernetes-directory: k8s
+#         policy-directory: policies
+
+on:
+  workflow_call:
+    inputs:
+      terraform-directory:
+        description: Directory with Terraform code (skipped when empty)
+        type: string
+        default: ""
+      kubernetes-directory:
+        description: Directory with Kubernetes manifests (skipped when empty)
+        type: string
+        default: ""
+      policy-directory:
+        description: Directory with Rego policies, tested with `conftest verify` and applied to the manifests
+        type: string
+        default: ""
+      terraform-version:
+        type: string
+        default: latest
+      tflint-version:
+        type: string
+        default: "0.65.0"
+      kubeconform-version:
+        type: string
+        default: "0.8.0"
+      conftest-version:
+        type: string
+        default: "0.71.1"
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    name: terraform
+    if: inputs.terraform-directory != ''
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.terraform-directory }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: ${{ inputs.terraform-version }}
+          terraform_wrapper: false
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive -diff
+
+      - name: Validate
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+      - name: Install tflint (checksum verified)
+        env:
+          VERSION: ${{ inputs.tflint-version }}
+        run: |
+          cd "$RUNNER_TEMP"
+          base="https://github.com/terraform-linters/tflint/releases/download/v${VERSION}"
+          curl -fsSLO "${base}/tflint_linux_amd64.zip"
+          curl -fsSLO "${base}/checksums.txt"
+          grep " tflint_linux_amd64.zip\$" checksums.txt | sha256sum -c -
+          unzip -q tflint_linux_amd64.zip tflint
+
+      - name: Run tflint
+        run: |
+          "$RUNNER_TEMP/tflint" --init
+          "$RUNNER_TEMP/tflint" --recursive
+
+  kubernetes:
+    name: kubernetes
+    if: inputs.kubernetes-directory != '' || inputs.policy-directory != ''
+    runs-on: ubuntu-latest
+    env:
+      MANIFESTS: ${{ inputs.kubernetes-directory }}
+      POLICIES: ${{ inputs.policy-directory }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install kubeconform (checksum verified)
+        if: inputs.kubernetes-directory != ''
+        env:
+          VERSION: ${{ inputs.kubeconform-version }}
+        run: |
+          cd "$RUNNER_TEMP"
+          base="https://github.com/yannh/kubeconform/releases/download/v${VERSION}"
+          curl -fsSLO "${base}/kubeconform-linux-amd64.tar.gz"
+          curl -fsSLO "${base}/CHECKSUMS"
+          grep " kubeconform-linux-amd64.tar.gz\$" CHECKSUMS | sha256sum -c -
+          tar -xzf kubeconform-linux-amd64.tar.gz kubeconform
+
+      - name: Run kubeconform
+        if: inputs.kubernetes-directory != ''
+        run: '"$RUNNER_TEMP/kubeconform" -strict -summary "$MANIFESTS"'
+
+      - name: Install conftest (checksum verified)
+        if: inputs.policy-directory != ''
+        env:
+          VERSION: ${{ inputs.conftest-version }}
+        run: |
+          cd "$RUNNER_TEMP"
+          archive="conftest_${VERSION}_Linux_x86_64.tar.gz"
+          base="https://github.com/open-policy-agent/conftest/releases/download/v${VERSION}"
+          curl -fsSLO "${base}/${archive}"
+          curl -fsSLO "${base}/checksums.txt"
+          grep " ${archive}\$" checksums.txt | sha256sum -c -
+          tar -xzf "${archive}" conftest
+
+      # The policy unit tests are the negative tests: they prove that bad input is denied.
+      - name: Test policies
+        if: inputs.policy-directory != ''
+        run: '"$RUNNER_TEMP/conftest" verify --policy "$POLICIES"'
+
+      - name: Enforce policies on manifests
+        if: inputs.policy-directory != '' && inputs.kubernetes-directory != ''
+        run: '"$RUNNER_TEMP/conftest" test --policy "$POLICIES" "$MANIFESTS"'
