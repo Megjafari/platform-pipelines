@@ -1,7 +1,8 @@
 name: Reusable / Container
 
 # Builds a multi-arch image, blocks it on Trivy findings and only then pushes it
-# to GHCR. Pull requests are built and scanned but never pushed.
+# to GHCR, followed by SBOM, keyless signing, attestations and verification.
+# Pull requests are built and scanned but never pushed.
 #
 # Usage:
 #   jobs:
@@ -10,6 +11,8 @@ name: Reusable / Container
 #       permissions:
 #         contents: read
 #         packages: write
+#         id-token: write
+#         attestations: write
 
 on:
   workflow_call:
@@ -32,6 +35,10 @@ on:
         default: linux/amd64,linux/arm64
       push:
         description: Push the image (never happens on pull_request events)
+        type: boolean
+        default: true
+      attest:
+        description: Create GitHub attestations (needs a public repository, or GitHub Enterprise for private ones)
         type: boolean
         default: true
       trivy-severity:
@@ -63,6 +70,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write # keyless signing and attestations
+      attestations: write
     env:
       TRIVY_EXIT_CODE: "1"
       TRIVY_SCANNERS: vuln
@@ -155,3 +164,60 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Everything below works on the digest, never on a tag: a tag can be moved.
+      - name: Generate SBOM
+        if: steps.vars.outputs.push == 'true'
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.vars.outputs.image }}@${{ steps.build.outputs.digest }}
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ github.token }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          artifact-name: sbom.spdx.json
+          dependency-snapshot: false
+
+      - uses: sigstore/cosign-installer@v4
+        if: steps.vars.outputs.push == 'true'
+
+      - name: Sign image with cosign (keyless)
+        if: steps.vars.outputs.push == 'true'
+        env:
+          REF: ${{ steps.vars.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "$REF"
+
+      - name: Attest build provenance
+        if: steps.vars.outputs.push == 'true' && inputs.attest
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ steps.vars.outputs.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest SBOM
+        if: steps.vars.outputs.push == 'true' && inputs.attest
+        uses: actions/attest-sbom@v4
+        with:
+          subject-name: ${{ steps.vars.outputs.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          sbom-path: sbom.spdx.json
+          push-to-registry: true
+
+      # Prove the published image can be verified the way a consumer would do it.
+      - name: Verify signature
+        if: steps.vars.outputs.push == 'true'
+        env:
+          REF: ${{ steps.vars.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: |
+          cosign verify "$REF" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp '^https://github\.com/.+/\.github/workflows/reusable-container\.yml@' \
+            --certificate-github-workflow-repository "$GITHUB_REPOSITORY"
+
+      - name: Verify provenance attestation
+        if: steps.vars.outputs.push == 'true' && inputs.attest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: oci://${{ steps.vars.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: gh attestation verify "$REF" --owner "$GITHUB_REPOSITORY_OWNER"
