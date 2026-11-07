@@ -74,3 +74,24 @@ jobs:
             echo "::error::Expected gitleaks to find the fake token (exit $BLOCKED), got exit $code"
             exit 1
           fi
+
+  cosign-rejects-unsigned-image:
+    name: cosign rejects an unsigned image
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: alpine:3.10.0 # not signed by reusable-container
+    steps:
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
+      # Checks the message too, so that a network error cannot pass as "rejected".
+      - name: Expect verification to fail
+        run: |
+          code=0
+          output=$(cosign verify "$IMAGE" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp '^https://github\.com/.+/\.github/workflows/reusable-container\.yml@' 2>&1) || code=$?
+          echo "$output"
+          if [ "$code" -eq 0 ] || ! grep -Eiq 'no (matching )?signatures' <<< "$output"; then
+            echo "::error::Expected cosign to report that $IMAGE has no matching signatures (exit $code)"
+            exit 1
+          fi
