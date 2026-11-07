@@ -12,7 +12,7 @@ between the builds, even when the source code has not.
 ## Decision
 
 Build an image once. Promotion adds a tag such as `staging` or `prod` to the
-existing digest. The image is rebuilt never, and its bytes do not change.
+existing digest. The image is never rebuilt, and its bytes do not change.
 
 Before tagging, verify that the digest was signed by `reusable-container` from
 the expected repository. After tagging, confirm that the tag points at the digest.
