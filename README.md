@@ -29,6 +29,8 @@ See [how the pieces fit together](docs/architecture.md) and the
 | [`reusable-dotnet-ci`](#reusable-dotnet-ci) | .NET build, test, coverage, format check |
 | [`reusable-node-ci`](#reusable-node-ci) | npm / pnpm / yarn: lint, typecheck, test, build |
 | [`reusable-container`](#reusable-container) | Multi-arch build, Trivy gate, SBOM, cosign, provenance, GHCR |
+| [`reusable-container-promote`](#reusable-container-promote) | Promote a signed image by digest, without rebuilding |
+| [`reusable-scheduled-scan`](#reusable-scheduled-scan) | Scan published images and track findings in issues |
 | [`reusable-iac-validate`](#reusable-iac-validate) | Terraform, kubeconform, conftest policies |
 | [`reusable-release`](#reusable-release) | Conventional Commits to release PR, tag and changelog |
 | [`reusable-docs-site`](#reusable-docs-site) | MkDocs site on GitHub Pages |
@@ -146,6 +148,71 @@ jobs:
 | `working-directory` | `.` | Directory with `package.json` |
 | `run-lint`, `run-typecheck`, `run-test`, `run-build` | `true` | Turn a step off |
 | `build-output` | empty | Output to upload as an artifact |
+
+### reusable-container-promote
+
+Adds a tag such as `staging` or `prod` to an image that is already built. It verifies
+that the digest was signed by `reusable-container`, adds the tag and confirms the
+result. Nothing is rebuilt, so what was tested is what moves on. Use a GitHub
+environment with required reviewers for manual approval.
+
+```yaml
+jobs:
+  promote:
+    needs: container
+    uses: Megjafari/platform-pipelines/.github/workflows/reusable-container-promote.yml@v1
+    permissions:
+      contents: read
+      packages: write
+    with:
+      image: ${{ needs.container.outputs.image }}
+      digest: ${{ needs.container.outputs.digest }}
+      target-tag: prod
+      environment: prod
+```
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `image` | required | Image name without tag or digest |
+| `digest` | required | Digest to promote |
+| `target-tag` | required | Tag to add |
+| `environment` | empty | GitHub environment for the job |
+| `signed-by-repository` | calling repository | Repository that must have signed the image |
+| `crane-version` | `0.22.1` | Pinned tool version |
+
+### reusable-scheduled-scan
+
+An image that was clean when it was built can have known vulnerabilities later.
+This scans published images on a schedule and keeps one issue per image up to date,
+closing it when the image is clean. A scan that cannot run fails the job.
+
+```yaml
+on:
+  schedule:
+    - cron: "23 3 * * *"
+
+jobs:
+  scan:
+    uses: Megjafari/platform-pipelines/.github/workflows/reusable-scheduled-scan.yml@v1
+    permissions:
+      contents: read
+      issues: write
+      packages: read
+    with:
+      images: |
+        ghcr.io/owner/app:prod
+        ghcr.io/owner/worker:prod
+```
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `images` | required | Image references, one per line |
+| `severity` | `CRITICAL,HIGH` | Severities to report |
+| `ignore-unfixed` | `true` | Ignore vulnerabilities without a fix |
+| `open-issues` | `true` | Open, update and close issues |
+| `fail-on-findings` | `false` | Fail the job when there are findings |
+| `issue-label` | `vulnerability-scan` | Label on the issues |
+| `trivy-version` | `0.76.2` | Pinned tool version |
 
 ### reusable-iac-validate
 

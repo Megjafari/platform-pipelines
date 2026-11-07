@@ -16,9 +16,9 @@ flowchart LR
 
     subgraph library [platform-pipelines at v1]
         quality[lint, dotnet-ci, node-ci]
-        security[codeql, dependency-review]
+        security[codeql, dependency-review, scheduled-scan]
         iac[iac-validate]
-        delivery[container, release, docs-site]
+        delivery[container, promote, release, docs-site]
     end
 
     app1 --> quality
@@ -33,7 +33,8 @@ flowchart LR
 
 Nothing reaches the registry before the scans pass, and everything after the push
 works on the digest, because a tag can be moved. See
-[ADR 0003](adr/0003-gate-before-publish-sign-by-digest.md).
+[ADR 0003](adr/0003-gate-before-publish-sign-by-digest.md) and
+[ADR 0004](adr/0004-build-once-promote-by-digest.md).
 
 ```mermaid
 flowchart TD
@@ -48,6 +49,9 @@ flowchart TD
     sbom --> sign[Keyless cosign signature]
     sign --> attest[Provenance and SBOM attestations]
     attest --> verify[Verify like a consumer]
+    verify --> promote[Promote the digest to staging or prod]
+    promote --> nightly[Nightly scan of published images]
+    nightly -->|new findings| issue[Issue per image]
 ```
 
 ## From commit to release
