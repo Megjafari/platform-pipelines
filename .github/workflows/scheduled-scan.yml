@@ -1,0 +1,21 @@
+name: Scheduled scan
+
+on:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+  pull_request: # proves the workflow runs, without touching issues
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    uses: ./.github/workflows/reusable-scheduled-scan.yml
+    permissions:
+      contents: read
+      issues: write
+      packages: read
+    with:
+      images: ghcr.io/megjafari/platform-pipelines/hello-web:main
+      open-issues: ${{ github.event_name != 'pull_request' }}
