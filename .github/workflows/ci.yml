@@ -35,3 +35,16 @@ jobs:
       context: examples/hello-web
       image: ghcr.io/${{ github.repository }}/hello-web
       attest: ${{ !github.event.repository.private }}
+
+  # Every image built on main moves on to staging without being rebuilt.
+  promote-staging:
+    if: github.event_name == 'push'
+    needs: container
+    uses: ./.github/workflows/reusable-container-promote.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      image: ${{ needs.container.outputs.image }}
+      digest: ${{ needs.container.outputs.digest }}
+      target-tag: staging
