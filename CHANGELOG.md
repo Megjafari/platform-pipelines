@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.0](https://github.com/Megjafari/platform-pipelines/compare/v1.1.0...v1.2.0) (2026-11-07)
+
+
+### Features
+
+* add reusable-container-promote workflow ([908798d](https://github.com/Megjafari/platform-pipelines/commit/908798d736c5ca12d589b9749fbc0cbe269320ac))
+* add reusable-scheduled-scan workflow ([b4ec638](https://github.com/Megjafari/platform-pipelines/commit/b4ec6388bc6e55cf73295d5d15c6669311fce41a))
+* **container:** add reusable-container-promote workflow ([6e7b99f](https://github.com/Megjafari/platform-pipelines/commit/6e7b99f3a6f9bdaea226bd17d25daf3b5cf3090d))
+* **security:** add reusable-scheduled-scan workflow ([7c7acbe](https://github.com/Megjafari/platform-pipelines/commit/7c7acbefde5cf18dfb24a790b2e64500bfced93a))
+
+
+### Bug Fixes
+
+* **docs:** queue Pages deployments ([02dfd08](https://github.com/Megjafari/platform-pipelines/commit/02dfd08fcae8877b307ac66aeb08ed0621882c0c))
+* queue Pages deployments ([d206758](https://github.com/Megjafari/platform-pipelines/commit/d20675831e907df0738f072c70deaf437e106e4c))
+
 ## [1.1.0](https://github.com/Megjafari/platform-pipelines/compare/v1.0.0...v1.1.0) (2026-11-06)
 
 
