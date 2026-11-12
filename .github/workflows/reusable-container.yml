@@ -41,6 +41,10 @@ on:
         description: Create GitHub attestations (needs a public repository, or GitHub Enterprise for private ones)
         type: boolean
         default: true
+      no-cache:
+        description: Build without the layer cache, for example to force package upgrades in RUN steps
+        type: boolean
+        default: false
       trivy-severity:
         description: Severities that fail the build
         type: string
@@ -93,6 +97,8 @@ jobs:
           {
             echo "image=${image,,}"
             echo "push=${PUSH}"
+            # A new cache every day, so cached RUN steps such as package upgrades are at most a day old.
+            echo "cache-scope=$(echo "${image,,}" | tr '/:' '--')-$(date -u +%Y-%m-%d)"
           } >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
@@ -145,8 +151,10 @@ jobs:
           push: false
           provenance: false
           tags: local-scan:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          pull: true
+          no-cache: ${{ inputs.no-cache }}
+          cache-from: type=gha,scope=${{ steps.vars.outputs.cache-scope }}
+          cache-to: type=gha,mode=max,scope=${{ steps.vars.outputs.cache-scope }}
 
       - name: Scan image
         run: '"$RUNNER_TEMP/trivy" image "local-scan:${GITHUB_SHA}"'
@@ -162,8 +170,10 @@ jobs:
           provenance: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          pull: true
+          no-cache: ${{ inputs.no-cache }}
+          cache-from: type=gha,scope=${{ steps.vars.outputs.cache-scope }}
+          cache-to: type=gha,mode=max,scope=${{ steps.vars.outputs.cache-scope }}
 
       # Everything below works on the digest, never on a tag: a tag can be moved.
       - name: Generate SBOM

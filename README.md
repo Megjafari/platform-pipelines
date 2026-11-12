@@ -91,7 +91,9 @@ jobs:
 Scans the build context, builds a local image and scans that too. Only if both
 pass does it build for all platforms and push to GHCR. After the push it creates
 an SPDX SBOM, signs with cosign (keyless) and adds GitHub attestations, all on the
-digest, and then verifies the result. Pull requests build and scan but never push.
+digest, and then verifies the result. Pull requests build and scan but never push. The base image is pulled on every
+build, and the layer cache starts over each day, so a `RUN apk upgrade` or
+similar step is never more than a day old.
 
 ```yaml
 jobs:
@@ -112,6 +114,7 @@ jobs:
 | `platforms` | `linux/amd64,linux/arm64` | Target platforms |
 | `push` | `true` | Push the image (never on `pull_request`) |
 | `attest` | `true` | GitHub attestations; set `false` on private repositories without Enterprise |
+| `no-cache` | `false` | Build without the layer cache, to force upgrades in `RUN` steps |
 | `trivy-severity` | `CRITICAL,HIGH` | Severities that fail the build |
 | `trivy-ignore-unfixed` | `true` | Ignore vulnerabilities without a fix |
 | `trivy-version` | `0.76.2` | Pinned tool version |
