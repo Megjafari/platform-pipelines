@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.0](https://github.com/Megjafari/platform-pipelines/compare/v1.2.0...v1.3.0) (2026-11-12)
+
+
+### Features
+
+* add reusable-bun-ci workflow ([fbc1b5f](https://github.com/Megjafari/platform-pipelines/commit/fbc1b5fe6aad94250cde441216b087571d9d8c78))
+* **bun:** add reusable-bun-ci workflow ([41a3a19](https://github.com/Megjafari/platform-pipelines/commit/41a3a198eefe80cdf87b6860cf67867bebea3b5d))
+
+
+### Bug Fixes
+
+* **container:** stop the layer cache from hiding security fixes ([e921d4e](https://github.com/Megjafari/platform-pipelines/commit/e921d4ed6d887471daf158897ad2bedd1a889779))
+* **scan:** split the issue hint over two lines ([00e5a50](https://github.com/Megjafari/platform-pipelines/commit/00e5a5063ab46814b893c96f2b673c774b2e23ff))
+* stop the layer cache from hiding security fixes ([11cbc2a](https://github.com/Megjafari/platform-pipelines/commit/11cbc2ade60f9678afa53bb396e41fbd12506401))
+
 ## [1.2.0](https://github.com/Megjafari/platform-pipelines/compare/v1.1.0...v1.2.0) (2026-11-07)
 
 
