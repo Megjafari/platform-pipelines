@@ -1,0 +1,17 @@
+name: CI / Bun
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  bun:
+    uses: ./.github/workflows/reusable-bun-ci.yml
+    with:
+      bun-version: "1.4.4"
+      working-directory: examples/bun-web
+      build-output: dist
