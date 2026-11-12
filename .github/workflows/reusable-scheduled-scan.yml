@@ -139,6 +139,7 @@ jobs:
               {
                 echo "The [scheduled scan]($RUN_URL) found $count vulnerabilities in \`$image\`."
                 echo "Rebuild the image to pick up fixes, then promote the new digest."
+                echo "Use \`no-cache: true\` if a fix is newer than today's build cache."
                 echo
                 echo "| Vulnerability | Package | Installed | Fixed in | Severity |"
                 echo "| --- | --- | --- | --- | --- |"

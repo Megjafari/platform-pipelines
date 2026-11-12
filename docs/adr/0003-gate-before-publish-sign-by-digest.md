@@ -29,3 +29,7 @@ what was actually built.
 - GitHub attestations need a public repository (or GitHub Enterprise), so they
   are an input. `gh attestation verify` uses `--owner`, which assumes that the
   consumer and this library have the same owner.
+- The layer cache can hide security fixes: a cached `RUN apk upgrade` layer keeps
+  the old packages, so the gate kept failing although a fix existed. The base
+  image is therefore pulled on every build, and the cache scope changes each day.
+  `no-cache: true` forces a clean build when a fix cannot wait until tomorrow.
