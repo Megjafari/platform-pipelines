@@ -1,0 +1,102 @@
+name: Reusable / Bun CI
+
+# Installs from bun.lock and runs the project's lint, typecheck, test and build.
+# Lint, typecheck and build run the package.json scripts of the same name and are
+# skipped when the script is missing. Tests use the "test" script when there is
+# one, otherwise Bun's built-in test runner.
+#
+# Usage:
+#   jobs:
+#     bun:
+#       uses: Megjafari/platform-pipelines/.github/workflows/reusable-bun-ci.yml@v1
+#       with:
+#         bun-version: "1.4.4"
+
+on:
+  workflow_call:
+    inputs:
+      bun-version:
+        description: Bun version, such as 1.4.4 or latest
+        type: string
+        default: latest
+      working-directory:
+        description: Directory containing package.json
+        type: string
+        default: "."
+      run-lint:
+        type: boolean
+        default: true
+      run-typecheck:
+        type: boolean
+        default: true
+      run-test:
+        type: boolean
+        default: true
+      run-build:
+        type: boolean
+        default: true
+      build-output:
+        description: Build output to upload as an artifact, relative to working-directory (skipped when empty)
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: lint, test, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ inputs.bun-version }}
+
+      - name: Cache Bun packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock', '**/bun.lockb') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Prepare script runner
+        run: |
+          cat > "$RUNNER_TEMP/has-script.sh" <<'EOF'
+          jq -e --arg name "$1" '.scripts[$name]' package.json > /dev/null
+          EOF
+
+      - name: Lint
+        if: inputs.run-lint
+        run: |
+          if bash "$RUNNER_TEMP/has-script.sh" lint; then bun run lint; else echo "No lint script, skipping"; fi
+
+      - name: Typecheck
+        if: inputs.run-typecheck
+        run: |
+          if bash "$RUNNER_TEMP/has-script.sh" typecheck; then bun run typecheck; else echo "No typecheck script, skipping"; fi
+
+      - name: Test
+        if: inputs.run-test
+        run: |
+          if bash "$RUNNER_TEMP/has-script.sh" test; then bun run test; else bun test; fi
+
+      - name: Build
+        if: inputs.run-build
+        run: |
+          if bash "$RUNNER_TEMP/has-script.sh" build; then bun run build; else echo "No build script, skipping"; fi
+
+      - name: Upload build output
+        if: inputs.build-output != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: bun-build
+          path: ${{ inputs.working-directory }}/${{ inputs.build-output }}
+          if-no-files-found: error

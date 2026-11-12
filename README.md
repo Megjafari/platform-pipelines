@@ -28,6 +28,7 @@ See [how the pieces fit together](docs/architecture.md) and the
 | [`reusable-lint`](#reusable-lint) | actionlint, yamllint, gitleaks |
 | [`reusable-dotnet-ci`](#reusable-dotnet-ci) | .NET build, test, coverage, format check |
 | [`reusable-node-ci`](#reusable-node-ci) | npm / pnpm / yarn: lint, typecheck, test, build |
+| [`reusable-bun-ci`](#reusable-bun-ci) | Bun: install, lint, typecheck, test, build |
 | [`reusable-container`](#reusable-container) | Multi-arch build, Trivy gate, SBOM, cosign, provenance, GHCR |
 | [`reusable-container-promote`](#reusable-container-promote) | Promote a signed image by digest, without rebuilding |
 | [`reusable-scheduled-scan`](#reusable-scheduled-scan) | Scan published images and track findings in issues |
@@ -148,6 +149,28 @@ jobs:
 | --- | --- | --- |
 | `node-version` | `24` | Node.js version |
 | `package-manager` | `npm` | `npm`, `pnpm` or `yarn` |
+| `working-directory` | `.` | Directory with `package.json` |
+| `run-lint`, `run-typecheck`, `run-test`, `run-build` | `true` | Turn a step off |
+| `build-output` | empty | Output to upload as an artifact |
+
+### reusable-bun-ci
+
+Installs from `bun.lock` with `--frozen-lockfile`. Lint, typecheck and build run the
+`package.json` scripts of the same name and are skipped when a script is missing.
+Tests use the `test` script when there is one, otherwise `bun test`.
+
+```yaml
+jobs:
+  bun:
+    uses: Megjafari/platform-pipelines/.github/workflows/reusable-bun-ci.yml@v1
+    with:
+      bun-version: "1.4.4"
+      build-output: dist
+```
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `bun-version` | `latest` | Bun version; pin it for reproducible builds |
 | `working-directory` | `.` | Directory with `package.json` |
 | `run-lint`, `run-typecheck`, `run-test`, `run-build` | `true` | Turn a step off |
 | `build-output` | empty | Output to upload as an artifact |

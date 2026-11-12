@@ -15,7 +15,7 @@ flowchart LR
     end
 
     subgraph library [platform-pipelines at v1]
-        quality[lint, dotnet-ci, node-ci]
+        quality[lint, dotnet-ci, node-ci, bun-ci]
         security[codeql, dependency-review, scheduled-scan]
         iac[iac-validate]
         delivery[container, promote, release, docs-site]
