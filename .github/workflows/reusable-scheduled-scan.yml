@@ -138,7 +138,7 @@ jobs:
               count=$(grep -c . <<< "$rows")
               {
                 echo "The [scheduled scan]($RUN_URL) found $count vulnerabilities in \`$image\`."
-                echo "Rebuild the image to pick up fixes, then promote the new digest."
+                echo "Rebuild the image to pick up fixes (with \`no-cache: true\` if the fix is newer than today's build cache), then promote the new digest."
                 echo
                 echo "| Vulnerability | Package | Installed | Fixed in | Severity |"
                 echo "| --- | --- | --- | --- | --- |"
