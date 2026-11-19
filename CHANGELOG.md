@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.1](https://github.com/Megjafari/platform-pipelines/compare/v1.3.0...v1.3.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* base hello-web on nginx mainline ([d31269e](https://github.com/Megjafari/platform-pipelines/commit/d31269e979c1a49416b09d4c8f8211a0701c5ce0))
+* **examples:** base hello-web on nginx mainline ([65e1509](https://github.com/Megjafari/platform-pipelines/commit/65e1509656ccc92ef82d4917107bb7038e179862))
+
 ## [1.3.0](https://github.com/Megjafari/platform-pipelines/compare/v1.2.0...v1.3.0) (2026-11-12)
 
 
